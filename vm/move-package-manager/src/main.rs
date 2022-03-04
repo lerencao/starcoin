@@ -8,6 +8,7 @@ use move_core_types::errmap::ErrorMapping;
 use move_package_manager::compatibility_check_cmd::{
     handle_compatibility_check, CompatibilityCheckCommand,
 };
+use move_package_manager::decompile::*;
 use move_package_manager::releasement::{handle_release, Releasement};
 use move_package_manager::{run_transactional_test, TransactionalTestCommand};
 use starcoin_config::genesis_config;
@@ -33,6 +34,7 @@ pub enum Commands {
         #[structopt(subcommand)]
         cmd: package::cli::PackageCommand,
     },
+    Decompile(DecompileCommand),
     /// Release the package.
     #[structopt(name = "release")]
     Release(Releasement),
@@ -89,5 +91,6 @@ fn main() -> Result<()> {
         Commands::Experimental { storage_dir, cmd } => cmd.handle_command(move_args, &storage_dir),
         Commands::Release(releasement) => handle_release(move_args, releasement),
         Commands::CompatibilityCheck(cmd) => handle_compatibility_check(move_args, cmd),
+        Commands::Decompile(cmd) => handle_decompile(move_args, cmd),
     }
 }

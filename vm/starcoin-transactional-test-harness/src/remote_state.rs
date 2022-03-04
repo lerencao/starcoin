@@ -4,6 +4,8 @@ use move_binary_format::errors::VMError;
 use move_core_types::resolver::{ModuleResolver, ResourceResolver};
 use starcoin_crypto::HashValue;
 
+use move_cli::sandbox::utils::on_disk_state_view::OnDiskStateView;
+use move_cli::DEFAULT_STORAGE_DIR;
 use starcoin_rpc_api::state::StateApiClient;
 use starcoin_rpc_api::types::{BlockView, StateWithProofView};
 use starcoin_state_api::ChainStateWriter;
@@ -17,6 +19,7 @@ use starcoin_vm_types::errors::{Location, PartialVMError, PartialVMResult, VMRes
 use starcoin_vm_types::state_view::StateView;
 use starcoin_vm_types::write_set::WriteSet;
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 
@@ -273,6 +276,99 @@ impl RemoteStateAsyncView {
             .await
             .map_err(|_| PartialVMError::new(StatusCode::STORAGE_ERROR))?;
         Ok(state_with_proof.state.map(|v| v.0))
+    }
+}
+
+#[derive(Clone)]
+pub struct CachedRemoteStateView {
+    view: RemoteStateView,
+    cache: Arc<OnDiskStateView>,
+}
+
+impl CachedRemoteStateView {
+    pub fn from_url(rpc_url: &str, block_number: Option<u64>, cache_dir: PathBuf) -> Result<Self> {
+        let view = RemoteStateView::from_url(rpc_url, block_number)?;
+
+        let dir = cache_dir.join(view.svc.state_root.to_string());
+        let cache = OnDiskStateView::create(dir.clone(), dir.join(DEFAULT_STORAGE_DIR))?;
+        Ok(Self {
+            view,
+            cache: Arc::new(cache),
+        })
+    }
+}
+
+fn to_storage_error(e: anyhow::Error) -> PartialVMError {
+    PartialVMError::new(StatusCode::STORAGE_ERROR).with_message(e.to_string())
+}
+
+impl ModuleResolver for CachedRemoteStateView {
+    type Error = VMError;
+
+    fn get_module(&self, module_id: &ModuleId) -> VMResult<Option<Vec<u8>>> {
+        match self
+            .cache
+            .get_module(module_id)
+            .map_err(|e| to_storage_error(e).finish(Location::Undefined))?
+        {
+            Some(v) => Ok(Some(v)),
+            None => match self.view.get_module(module_id)? {
+                None => Ok(None),
+                Some(v) => {
+                    self.cache
+                        .save_module(module_id, &v)
+                        .map_err(|e| to_storage_error(e).finish(Location::Undefined))?;
+                    Ok(Some(v))
+                }
+            },
+        }
+    }
+}
+
+impl ResourceResolver for CachedRemoteStateView {
+    type Error = PartialVMError;
+    fn get_resource(
+        &self,
+        address: &AccountAddress,
+        tag: &StructTag,
+    ) -> PartialVMResult<Option<Vec<u8>>> {
+        match self
+            .cache
+            .get_resource(address, tag)
+            .map_err(to_storage_error)?
+        {
+            Some(v) => Ok(Some(v)),
+            None => match self.view.get_resource(address, tag)? {
+                None => Ok(None),
+                Some(v) => {
+                    self.cache
+                        .save_resource(*address, tag.clone(), &v)
+                        .map_err(to_storage_error)?;
+                    Ok(Some(v))
+                }
+            },
+        }
+    }
+}
+
+impl StateView for CachedRemoteStateView {
+    fn get(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
+        match &access_path.path {
+            DataPath::Code(m) => Ok(self
+                .get_module(&ModuleId::new(access_path.address, m.clone()))
+                .map_err(|err| err.into_vm_status())?),
+            DataPath::Resource(s) => Ok(self
+                .get_resource(&access_path.address, s)
+                .map_err(|err| err.finish(Location::Undefined).into_vm_status())?),
+        }
+    }
+
+    fn multi_get(&self, _access_paths: &[AccessPath]) -> Result<Vec<Option<Vec<u8>>>> {
+        unimplemented!()
+    }
+
+    fn is_genesis(&self) -> bool {
+        false
     }
 }
 

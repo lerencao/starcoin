@@ -1,4 +1,5 @@
 pub mod compatibility_check_cmd;
+pub mod decompile;
 pub mod releasement;
 use anyhow::Result;
 use move_cli::Move;
@@ -69,7 +70,7 @@ pub fn run_transactional_test(move_arg: Move, cmd: TransactionalTestCommand) -> 
         let compiled = BuildPlan::create(resolved_graph)?
             .compile_with_driver(
                 &mut std::io::stdout(),
-                |compiler: Compiler, _is_root: bool| {
+                |compiler: Compiler, is_root: bool| {
                     let full_program = match construct_pre_compiled_lib_from_compiler(compiler)? {
                         Ok(full_program) => full_program,
                         Err((file, s)) => report_diagnostics(&file, s),
@@ -79,57 +80,66 @@ pub fn run_transactional_test(move_arg: Move, cmd: TransactionalTestCommand) -> 
                         .parser
                         .lib_definitions
                         .extend(full_program.parser.source_definitions);
-                    pre_compiled_lib.expansion.modules =
-                        pre_compiled_lib.expansion.modules.union_with(
-                            &full_program.expansion.modules.filter_map(|_k, v| {
-                                if v.is_source_module {
-                                    Some(v)
-                                } else {
-                                    None
-                                }
-                            }),
-                            |_k, v1, _v2| v1.clone(),
-                        );
-                    pre_compiled_lib.naming.modules = pre_compiled_lib.naming.modules.union_with(
-                        &full_program.naming.modules.filter_map(|_k, v| {
-                            if v.is_source_module {
-                                Some(v)
-                            } else {
-                                None
-                            }
-                        }),
-                        |_k, v1, _v2| v1.clone(),
-                    );
-                    pre_compiled_lib.typing.modules = pre_compiled_lib.typing.modules.union_with(
-                        &full_program.typing.modules.filter_map(|_k, v| {
-                            if v.is_source_module {
-                                Some(v)
-                            } else {
-                                None
-                            }
-                        }),
-                        |_k, v1, _v2| v1.clone(),
-                    );
-                    pre_compiled_lib.hlir.modules = pre_compiled_lib.hlir.modules.union_with(
-                        &full_program.hlir.modules.filter_map(|_k, v| {
-                            if v.is_source_module {
-                                Some(v)
-                            } else {
-                                None
-                            }
-                        }),
-                        |_k, v1, _v2| v1.clone(),
-                    );
-                    pre_compiled_lib.cfgir.modules = pre_compiled_lib.cfgir.modules.union_with(
-                        &full_program.cfgir.modules.filter_map(|_k, v| {
-                            if v.is_source_module {
-                                Some(v)
-                            } else {
-                                None
-                            }
-                        }),
-                        |_k, v1, _v2| v1.clone(),
-                    );
+
+                    if is_root {
+                        pre_compiled_lib.expansion.modules = full_program.expansion.modules.clone();
+                        pre_compiled_lib.naming.modules = full_program.naming.modules;
+                        pre_compiled_lib.typing.modules = full_program.typing.modules;
+                        pre_compiled_lib.hlir.modules = full_program.hlir.modules;
+                        pre_compiled_lib.cfgir.modules = full_program.cfgir.modules;
+                        // pre_compiled_lib.expansion.modules.union_with(
+                        //         &full_program.expansion.modules.filter_map(|_k, v| {
+                        //             if v.is_source_module {
+                        //                 Some(v)
+                        //             } else {
+                        //                 None
+                        //             }
+                        //         }),
+                        //         |_k, v1, _v2| v1.clone(),
+                        //     );
+
+                        // pre_compiled_lib.naming.modules.union_with(
+                        //     &full_program.naming.modules.filter_map(|_k, v| {
+                        //         if v.is_source_module {
+                        //             Some(v)
+                        //         } else {
+                        //             None
+                        //         }
+                        //     }),
+                        //     |_k, v1, _v2| v1.clone(),
+                        // );
+                        // pre_compiled_lib.typing.modules =
+                        //     pre_compiled_lib.typing.modules.union_with(
+                        //         &full_program.typing.modules.filter_map(|_k, v| {
+                        //             if v.is_source_module {
+                        //                 Some(v)
+                        //             } else {
+                        //                 None
+                        //             }
+                        //         }),
+                        //         |_k, v1, _v2| v1.clone(),
+                        //     );
+                        // pre_compiled_lib.hlir.modules = pre_compiled_lib.hlir.modules.union_with(
+                        //     &full_program.hlir.modules.filter_map(|_k, v| {
+                        //         if v.is_source_module {
+                        //             Some(v)
+                        //         } else {
+                        //             None
+                        //         }
+                        //     }),
+                        //     |_k, v1, _v2| v1.clone(),
+                        // );
+                        // pre_compiled_lib.cfgir.modules = pre_compiled_lib.cfgir.modules.union_with(
+                        //     &full_program.cfgir.modules.filter_map(|_k, v| {
+                        //         if v.is_source_module {
+                        //             Some(v)
+                        //         } else {
+                        //             None
+                        //         }
+                        //     }),
+                        //     |_k, v1, _v2| v1.clone(),
+                        // );
+                    }
                     pre_compiled_lib
                         .compiled
                         .extend(full_program.compiled.clone());

@@ -1,8 +1,9 @@
 use crate::in_memory_state_cache::InMemoryStateCache;
-use crate::remote_state::{RemoteStateView, SelectableStateView};
+use crate::remote_state::{CachedRemoteStateView, SelectableStateView};
 use anyhow::{bail, Result};
 use itertools::Itertools;
 use move_binary_format::{file_format::CompiledScript, CompiledModule};
+
 use move_compiler::compiled_unit::CompiledUnitEnum;
 use move_compiler::shared::{NumberFormat, NumericalAddress};
 use move_compiler::{shared::verify_and_create_named_address_mapping, FullyCompiledProgram};
@@ -14,6 +15,7 @@ use move_core_types::{
     language_storage::{ModuleId, TypeTag},
     transaction_argument::TransactionArgument,
 };
+use move_package::source_package::layout::SourcePackageLayout;
 use move_transactional_test_runner::{
     framework,
     framework::{CompiledState, MoveTestAdapter},
@@ -46,7 +48,6 @@ use starcoin_vm_runtime::{data_cache::RemoteStorage, starcoin_vm::StarcoinVM};
 use starcoin_vm_types::account_config::{
     association_address, core_code_address, STC_TOKEN_CODE_STR,
 };
-
 use starcoin_vm_types::transaction::authenticator::AccountPublicKey;
 use starcoin_vm_types::transaction::{DryRunTransaction, TransactionOutput};
 use starcoin_vm_types::write_set::{WriteOp, WriteSetMut};
@@ -70,6 +71,8 @@ use structopt::StructOpt;
 
 mod in_memory_state_cache;
 pub mod remote_state;
+
+pub const CACHE_DIR: &str = "cache";
 
 fn parse_ed25519_key<T: ValidCryptoMaterial>(s: &str) -> Result<T> {
     Ok(T::from_encoded_string(s)?)
@@ -199,7 +202,7 @@ struct TransactionResult {
 
 pub struct StarcoinTestAdapter<'a> {
     compiled_state: CompiledState<'a>,
-    storage: SelectableStateView<ChainStateDB, InMemoryStateCache<RemoteStateView>>,
+    storage: SelectableStateView<ChainStateDB, InMemoryStateCache<CachedRemoteStateView>>,
     default_syntax: SyntaxChoice,
     public_key_mapping: BTreeMap<Identifier, AccountPublicKey>,
     association_public_key: AccountPublicKey,
@@ -586,7 +589,7 @@ impl<'a> MoveTestAdapter<'a> for StarcoinTestAdapter<'a> {
     }
 
     fn init(
-        _test_path: &Path,
+        test_path: &Path,
         default_syntax: SyntaxChoice,
         pre_compiled_deps: Option<&'a FullyCompiledProgram>,
         task_opt: Option<TaskInput<(InitCommand, Self::ExtraInitArgs)>>,
@@ -632,8 +635,18 @@ impl<'a> MoveTestAdapter<'a> for StarcoinTestAdapter<'a> {
                 }
             }
         }
+
+        let remote_mode = init_args.rpc.is_some();
+
         let store = if let Some(rpc) = init_args.rpc {
-            let remote_view = RemoteStateView::from_url(&rpc, init_args.block_number).unwrap();
+            let package_root =
+                SourcePackageLayout::try_find_root(&test_path.canonicalize().unwrap()).ok();
+            let cache_dir = package_root
+                .unwrap_or_else(|| std::env::current_dir().unwrap())
+                .join(CACHE_DIR);
+
+            let remote_view =
+                CachedRemoteStateView::from_url(&rpc, init_args.block_number, cache_dir).unwrap();
             SelectableStateView::B(InMemoryStateCache::new(remote_view))
         } else {
             let net = ChainNetwork::new_builtin(init_args.network.unwrap());
@@ -660,6 +673,7 @@ impl<'a> MoveTestAdapter<'a> for StarcoinTestAdapter<'a> {
         );
 
         // add pre compiled modules
+
         if let Some(pre_compiled_lib) = pre_compiled_deps {
             let mut writes = WriteSetMut::default();
             for c in &pre_compiled_lib.compiled {
@@ -683,6 +697,18 @@ impl<'a> MoveTestAdapter<'a> for StarcoinTestAdapter<'a> {
                         named_address_mapping.insert(name, m.named_module.address);
                     }
 
+                    // skip write deps
+                    if remote_mode {
+                        if let Some(md) =
+                            pre_compiled_lib.cfgir.modules.get_(&m.module_ident().value)
+                        {
+                            if !md.is_source_module {
+                                continue;
+                            }
+                        } else {
+                            continue;
+                        }
+                    }
                     writes.push((
                         AccessPath::code_access_path(
                             m.named_module.address.into_inner(),
