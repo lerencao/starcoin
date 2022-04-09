@@ -231,3 +231,27 @@ starcoin-vm-runtime.debug = 1
 
 [profile.release.package."*"]
 debug = false
+
+[patch."https://github.com/starcoinorg/move"]
+move-bytecode-source-map = {git = "https://github.com/lerencao/move", branch="debug-temp"  }
+move-bytecode-verifier = { git = "https://github.com/lerencao/move", branch="debug-temp"  }
+move-disassembler = { git = "https://github.com/lerencao/move", branch="debug-temp"  }
+move-docgen = { git = "https://github.com/lerencao/move", branch="debug-temp"  }
+move-errmapgen = { git = "https://github.com/lerencao/move", branch="debug-temp"  }
+move-binary-format = { git = "https://github.com/lerencao/move", branch="debug-temp"  }
+move-command-line-common = { git = "https://github.com/lerencao/move", branch="debug-temp"  }
+move-transactional-test-runner= { git = "https://github.com/lerencao/move", branch="debug-temp"  }
+move-core-types={ git = "https://github.com/lerencao/move", branch="debug-temp"  }
+move-coverage={ git = "https://github.com/lerencao/move", branch="debug-temp"  }
+move-ir-types={ git = "https://github.com/lerencao/move", branch="debug-temp"  }
+move-compiler={ git = "https://github.com/lerencao/move", branch="debug-temp"  }
+move-model={ git = "https://github.com/lerencao/move", branch="debug-temp"  }
+move-prover={ git = "https://github.com/lerencao/move", branch="debug-temp"  }
+move-prover-test-utils={ git = "https://github.com/lerencao/move", branch="debug-temp"  }
+move-unit-test={ git = "https://github.com/lerencao/move", branch="debug-temp"  }
+move-vm-runtime={ git = "https://github.com/lerencao/move", branch="debug-temp"  }
+move-vm-types={ git = "https://github.com/lerencao/move", branch="debug-temp"  }
+short-hex-str={ git = "https://github.com/lerencao/move", branch="debug-temp"  }
+move-resource-viewer={ git = "https://github.com/lerencao/move", branch="debug-temp" }
+move-cli = { git = "https://github.com/lerencao/move", branch="debug-temp" }
+move-package = { git = "https://github.com/lerencao/move", branch="debug-temp" }
