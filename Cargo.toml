@@ -251,7 +251,6 @@ move-prover-test-utils={ git = "https://github.com/lerencao/move", branch="debug
 move-unit-test={ git = "https://github.com/lerencao/move", branch="debug-temp"  }
 move-vm-runtime={ git = "https://github.com/lerencao/move", branch="debug-temp"  }
 move-vm-types={ git = "https://github.com/lerencao/move", branch="debug-temp"  }
-short-hex-str={ git = "https://github.com/lerencao/move", branch="debug-temp"  }
 move-resource-viewer={ git = "https://github.com/lerencao/move", branch="debug-temp" }
 move-cli = { git = "https://github.com/lerencao/move", branch="debug-temp" }
 move-package = { git = "https://github.com/lerencao/move", branch="debug-temp" }
